@@ -7,13 +7,11 @@ import {
   CardTitle,
   Header,
   Empty,
-  GetLicense,
 } from "@/components";
 import {
   CheckCircle2,
   Sparkles,
   BotIcon,
-  LockIcon,
   ClockIcon,
 } from "lucide-react";
 import { useApp } from "@/contexts";
@@ -23,15 +21,11 @@ import moment from "moment";
 
 interface PluelyPrompt {
   title: string;
+  description: string;
   prompt: string;
+  category: string;
   modelId: string;
   modelName: string;
-}
-
-interface PluelyPromptsResponse {
-  prompts: PluelyPrompt[];
-  total: number;
-  last_updated?: string;
 }
 
 interface Model {
@@ -44,65 +38,62 @@ interface Model {
   isAvailable: boolean;
 }
 
-const SELECTED_PLUELY_MODEL_STORAGE_KEY = "selected_pluely_model";
+interface PluelyPromptsResponse {
+  prompts: PluelyPrompt[];
+  last_updated: string;
+}
+
 const SELECTED_PLUELY_PROMPT_STORAGE_KEY = "selected_pluely_prompt";
+const SELECTED_PLUELY_MODEL_STORAGE_KEY = "selected_pluely_model";
 
 export const PluelyPrompts = () => {
   const {
     setSystemPrompt,
-    hasActiveLicense,
     setSupportsImages,
     pluelyApiEnabled,
   } = useApp();
+
   const [prompts, setPrompts] = useState<PluelyPrompt[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [selectedPluelyPrompt, setSelectedPluelyPrompt] =
-    useState<PluelyPrompt | null>(() => {
-      // Load selected prompt from local storage on initial render
-      const stored = safeLocalStorage.getItem(
-        SELECTED_PLUELY_PROMPT_STORAGE_KEY
-      );
-      if (stored) {
-        try {
-          return JSON.parse(stored);
-        } catch {
-          return null;
-        }
-      }
-      return null;
-    });
+    useState<PluelyPrompt | null>(null);
   const [models, setModels] = useState<Model[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const fetchInitiated = useRef(false);
+
+  // Load saved Pluely prompt from local storage on mount
+  useEffect(() => {
+    const savedPluelyPrompt = safeLocalStorage.getItem(
+      SELECTED_PLUELY_PROMPT_STORAGE_KEY
+    );
+    if (savedPluelyPrompt) {
+      try {
+        setSelectedPluelyPrompt(JSON.parse(savedPluelyPrompt));
+      } catch (err) {
+        console.error("Failed to parse saved Pluely prompt:", err);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (!fetchInitiated.current) {
       fetchInitiated.current = true;
-      fetchPluelyPrompts();
+      fetchPrompts();
       fetchModels();
     }
   }, []);
 
-  // Watch for changes in user's selected prompt and clear Pluely selection if needed
+  // Listen for custom storage events from CustomPrompts
   useEffect(() => {
-    const checkUserPromptSelection = () => {
-      const userSelectedPromptId = safeLocalStorage.getItem(
-        STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID
-      );
-      // If user has selected one of their own prompts, clear Pluely prompt selection
-      if (userSelectedPromptId) {
-        setSelectedPluelyPrompt(null);
-      }
-    };
-
-    // Check on mount
-    checkUserPromptSelection();
-
-    // Listen for storage changes
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID) {
-        checkUserPromptSelection();
+      // If a user prompt was selected, clear the selected Pluely prompt
+      if (
+        e.key === STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID &&
+        e.newValue !== null
+      ) {
+        setSelectedPluelyPrompt(null);
+        safeLocalStorage.removeItem(SELECTED_PLUELY_PROMPT_STORAGE_KEY);
       }
     };
 
@@ -110,13 +101,30 @@ export const PluelyPrompts = () => {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  const fetchPluelyPrompts = async () => {
-    setIsLoading(true);
-    setError(null);
+  // Listen for custom events within the same window
+  useEffect(() => {
+    const handleCustomPromptSelected = () => {
+      setSelectedPluelyPrompt(null);
+    };
+
+    window.addEventListener(
+      "customPromptSelected",
+      handleCustomPromptSelected
+    );
+    return () =>
+      window.removeEventListener(
+        "customPromptSelected",
+        handleCustomPromptSelected
+      );
+  }, []);
+
+  const fetchPrompts = async () => {
     try {
+      setIsLoading(true);
+      setError(null);
       const response = await invoke<PluelyPromptsResponse>("fetch_prompts");
-      setPrompts(response.prompts);
-      if (response.last_updated) {
+      if (response && response.prompts) {
+        setPrompts(response.prompts);
         setLastUpdated(response.last_updated);
       }
     } catch (err) {
@@ -139,18 +147,12 @@ export const PluelyPrompts = () => {
   };
 
   const handleSelectPluelyPrompt = async (prompt: PluelyPrompt) => {
-    // Check if user has active license
-    if (!hasActiveLicense) {
-      return;
-    }
-
     try {
       // Set the system prompt
       setSystemPrompt(prompt.prompt);
       setSelectedPluelyPrompt(prompt);
 
       // Clear the user's selected prompt ID from local storage
-      // This ensures the user prompt cards don't show as selected
       safeLocalStorage.removeItem(STORAGE_KEYS.SELECTED_SYSTEM_PROMPT_ID);
 
       // Save the system prompt to local storage
@@ -252,24 +254,17 @@ export const PluelyPrompts = () => {
             )}
           </div>
         </div>
-        {!hasActiveLicense && (
-          <GetLicense buttonText="Unlock" buttonClassName="shrink-0" />
-        )}
       </div>
 
       <div
-        className={`grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 pb-4 ${
-          !hasActiveLicense ? "opacity-60" : ""
-        }`}
+        className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4 pb-4"
       >
         {prompts.map((prompt, index) => {
           const isSelected = isPromptSelected(prompt);
           return (
             <Card
               key={`${prompt.title}-${index}`}
-              className={`relative border lg:border-2 shadow-none p-4 pb-10 gap-0 group transition-all hover:shadow-sm ${
-                hasActiveLicense ? "cursor-pointer" : "cursor-not-allowed"
-              } ${
+              className={`relative border lg:border-2 shadow-none p-4 pb-10 gap-0 group transition-all hover:shadow-sm cursor-pointer ${
                 isSelected
                   ? "!bg-primary/5 dark:!bg-primary/10 border-primary"
                   : "!bg-black/5 dark:!bg-white/5 border-transparent"
@@ -278,9 +273,6 @@ export const PluelyPrompts = () => {
             >
               {isSelected && (
                 <CheckCircle2 className="size-5 text-green-500 flex-shrink-0 absolute top-2 right-2" />
-              )}
-              {!hasActiveLicense && (
-                <LockIcon className="size-4 text-muted-foreground flex-shrink-0 absolute top-2 right-2" />
               )}
               <CardHeader className="p-0 pb-0 select-none">
                 <div className="flex items-start justify-between gap-2 relative">

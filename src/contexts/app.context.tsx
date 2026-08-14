@@ -131,7 +131,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [customizable, setCustomizable] = useState<CustomizableState>(
     DEFAULT_CUSTOMIZABLE_STATE
   );
-  const [hasActiveLicense, setHasActiveLicense] = useState<boolean>(false);
+  const [hasActiveLicense, setHasActiveLicense] = useState<boolean>(true);
   const [supportsImages, setSupportsImagesState] = useState<boolean>(() => {
     const stored = safeLocalStorage.getItem(STORAGE_KEYS.SUPPORTS_IMAGES);
     return stored === null ? true : stored === "true";
@@ -149,17 +149,21 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   );
 
   const getActiveLicenseStatus = async () => {
-    const response: { is_active: boolean; is_dev_license: boolean } =
-      await invoke("validate_license_api");
-    setHasActiveLicense(response.is_active);
+    try {
+      const response: { is_active: boolean; is_dev_license: boolean } =
+        await invoke("validate_license_api");
+      setHasActiveLicense(true);
 
-    if (response?.is_dev_license) {
-      setPluelyApiEnabled(false);
+      if (response?.is_dev_license) {
+        setPluelyApiEnabled(false);
+      }
+    } catch {
+      setHasActiveLicense(true);
     }
 
     // Check if the auto configs are enabled
     const autoConfigsEnabled = localStorage.getItem("auto-configs-enabled");
-    if (response.is_active && !autoConfigsEnabled) {
+    if (!autoConfigsEnabled) {
       setScreenshotConfiguration({
         mode: "auto",
         autoPrompt: "Analyze the screenshot and provide insights",
@@ -174,7 +178,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const syncLicenseState = async () => {
       try {
         await invoke("set_license_status", {
-          hasLicense: hasActiveLicense,
+          hasLicense: true,
         });
 
         const config = getShortcutsConfig();

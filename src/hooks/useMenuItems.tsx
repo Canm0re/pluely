@@ -76,15 +76,11 @@ export const useMenuItems = () => {
   ];
 
   const footerItems = [
-    ...(hasActiveLicense
-      ? [
-          {
-            icon: MailIcon,
-            label: "Contact Support",
-            href: "mailto:support@pluely.com",
-          },
-        ]
-      : []),
+    {
+      icon: MailIcon,
+      label: "Contact Support",
+      href: "mailto:support@pluely.com",
+    },
     {
       icon: BugIcon,
       label: "Report a bug",

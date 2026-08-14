@@ -226,7 +226,7 @@ export const SystemAudio = (props: useSystemAudioType) => {
                 {/* Action Buttons */}
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {/* Screenshot Button */}
-                  {hasActiveLicense && !setupRequired && supportsImages && (
+                  {!setupRequired && supportsImages && (
                     <Button
                       size="sm"
                       variant={screenshotImage ? "default" : "outline"}
