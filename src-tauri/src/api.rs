@@ -882,12 +882,68 @@ async fn report_api_error(
     }
 }
 
+fn get_default_fallback_models() -> Vec<Model> {
+    vec![
+        Model {
+            provider: "gemini".to_string(),
+            name: "Gemini 3.7 Flash High".to_string(),
+            id: "gemini-3.7-flash".to_string(),
+            model: "gemini-3.7-flash".to_string(),
+            description: "Google's most capable, fast, and multimodal reasoning model on Google Cloud & AI Platform".to_string(),
+            modality: "text,image".to_string(),
+            is_available: true,
+        },
+        Model {
+            provider: "gemini".to_string(),
+            name: "Gemini 2.5 Flash".to_string(),
+            id: "gemini-2.5-flash".to_string(),
+            model: "gemini-2.5-flash".to_string(),
+            description: "High-speed multimodal intelligence for real-time tasks".to_string(),
+            modality: "text,image".to_string(),
+            is_available: true,
+        },
+        Model {
+            provider: "google-cloud".to_string(),
+            name: "Google Cloud Gemini 3.7 Flash".to_string(),
+            id: "google-cloud-gemini-3.7-flash".to_string(),
+            model: "gemini-3.7-flash".to_string(),
+            description: "Enterprise Gemini 3.7 Flash model via Google Cloud Agent Platform / Vertex AI".to_string(),
+            modality: "text,image".to_string(),
+            is_available: true,
+        },
+        Model {
+            provider: "openai".to_string(),
+            name: "GPT-4o".to_string(),
+            id: "gpt-4o".to_string(),
+            model: "gpt-4o".to_string(),
+            description: "OpenAI versatile multimodal flagship model".to_string(),
+            modality: "text,image".to_string(),
+            is_available: true,
+        },
+        Model {
+            provider: "anthropic".to_string(),
+            name: "Claude 3.7 Sonnet".to_string(),
+            id: "claude-3-7-sonnet-latest".to_string(),
+            model: "claude-3-7-sonnet-latest".to_string(),
+            description: "Anthropic hybrid reasoning model".to_string(),
+            modality: "text,image".to_string(),
+            is_available: true,
+        },
+    ]
+}
+
 // Models API Command
 #[tauri::command]
 pub async fn fetch_models(app: AppHandle) -> Result<Vec<Model>, String> {
     // Get environment variables
-    let app_endpoint = get_app_endpoint()?;
-    let api_access_key = get_api_access_key()?;
+    let app_endpoint = match get_app_endpoint() {
+        Ok(ep) => ep,
+        Err(_) => return Ok(get_default_fallback_models()),
+    };
+    let api_access_key = match get_api_access_key() {
+        Ok(key) => key,
+        Err(_) => return Ok(get_default_fallback_models()),
+    };
 
     let (license_key, instance_id) = match get_stored_credentials(&app).await {
         Ok((lk, id, _)) => (lk, id),
@@ -905,7 +961,7 @@ pub async fn fetch_models(app: AppHandle) -> Result<Vec<Model>, String> {
     let client = reqwest::Client::new();
     let url = format!("{}/api/models", app_endpoint);
 
-    let response = client
+    let response = match client
         .post(&url)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", api_access_key))
@@ -915,45 +971,20 @@ pub async fn fetch_models(app: AppHandle) -> Result<Vec<Model>, String> {
         .header("app_version", &app_version)
         .send()
         .await
-        .map_err(|e| {
-            let error_msg = format!("{}", e);
-            if error_msg.contains("url (") {
-                // Remove the URL part from the error message
-                let parts: Vec<&str> = error_msg.split(" for url (").collect();
-                if parts.len() > 1 {
-                    format!("Failed to make models request: {}", parts[0])
-                } else {
-                    format!("Failed to make models request: {}", error_msg)
-                }
-            } else {
-                format!("Failed to make models request: {}", error_msg)
-            }
-        })?;
+    {
+        Ok(resp) => resp,
+        Err(_) => return Ok(get_default_fallback_models()),
+    };
 
     // Check if the response is successful
     if !response.status().is_success() {
-        let status = response.status();
-        let error_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "Unknown server error".to_string());
-
-        // Try to parse error as JSON to get a more specific error message
-        if let Ok(error_json) = serde_json::from_str::<serde_json::Value>(&error_text) {
-            if let Some(error_msg) = error_json.get("error").and_then(|e| e.as_str()) {
-                return Err(format!("Server error ({}): {}", status, error_msg));
-            } else if let Some(message) = error_json.get("message").and_then(|m| m.as_str()) {
-                return Err(format!("Server error ({}): {}", status, message));
-            }
-        }
-
-        return Err(format!("Server error ({}): {}", status, error_text));
+        return Ok(get_default_fallback_models());
     }
 
-    let models_response: ModelsResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse models response: {}", e))?;
+    let models_response: ModelsResponse = match response.json().await {
+        Ok(parsed) => parsed,
+        Err(_) => return Ok(get_default_fallback_models()),
+    };
 
     Ok(models_response.models)
 }

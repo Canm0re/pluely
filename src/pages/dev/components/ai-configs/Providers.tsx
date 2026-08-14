@@ -60,9 +60,16 @@ export const Providers = ({
           })}
           placeholder="Choose your AI provider"
           onChange={(value) => {
+            const defaultVariables: Record<string, string> = {};
+            if (value === "gemini" || value === "google-cloud") {
+              defaultVariables.model = "gemini-3.7-flash";
+              if (value === "google-cloud") {
+                defaultVariables.location = "us-central1";
+              }
+            }
             onSetSelectedAIProvider({
               provider: value,
-              variables: {},
+              variables: defaultVariables,
             });
           }}
         />
@@ -184,6 +191,29 @@ export const Providers = ({
               return selectedAIProvider.variables[variable.key] || "";
             };
 
+            const getPlaceholder = () => {
+              if (variable?.key === "model") {
+                if (
+                  selectedAIProvider?.provider === "gemini" ||
+                  selectedAIProvider?.provider === "google-cloud"
+                ) {
+                  return "gemini-3.7-flash";
+                }
+              }
+              if (variable?.key === "location") return "us-central1";
+              if (variable?.key === "project_id") return "my-gcp-project-id";
+
+              const providerName =
+                allAiProviders?.find(
+                  (p) => p?.id === selectedAIProvider?.provider
+                )?.isCustom
+                  ? "Custom Provider"
+                  : selectedAIProvider?.provider;
+              return `Enter ${providerName} ${
+                variable?.key?.replace(/_/g, " ") || "value"
+              }`;
+            };
+
             return (
               <div className="space-y-1" key={variable?.key}>
                 <Header
@@ -200,13 +230,7 @@ export const Providers = ({
                   }`}
                 />
                 <TextInput
-                  placeholder={`Enter ${
-                    allAiProviders?.find(
-                      (p) => p?.id === selectedAIProvider?.provider
-                    )?.isCustom
-                      ? "Custom Provider"
-                      : selectedAIProvider?.provider
-                  } ${variable?.key?.replace(/_/g, " ") || "value"}`}
+                  placeholder={getPlaceholder()}
                   value={getVariableValue()}
                   onChange={(value) => {
                     if (!variable?.key || !selectedAIProvider) return;

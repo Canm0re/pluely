@@ -104,8 +104,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     provider: string;
     variables: Record<string, string>;
   }>({
-    provider: "",
-    variables: {},
+    provider: "gemini",
+    variables: {
+      model: "gemini-3.7-flash",
+    },
   });
 
   // STT Providers
@@ -245,7 +247,33 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       STORAGE_KEYS.SELECTED_AI_PROVIDER
     );
     if (savedSelectedAi) {
-      setSelectedAIProvider(JSON.parse(savedSelectedAi));
+      try {
+        const parsed = JSON.parse(savedSelectedAi);
+        if (parsed && parsed.provider) {
+          setSelectedAIProvider(parsed);
+        } else {
+          setSelectedAIProvider({
+            provider: "gemini",
+            variables: {
+              model: "gemini-3.7-flash",
+            },
+          });
+        }
+      } catch {
+        setSelectedAIProvider({
+          provider: "gemini",
+          variables: {
+            model: "gemini-3.7-flash",
+          },
+        });
+      }
+    } else {
+      setSelectedAIProvider({
+        provider: "gemini",
+        variables: {
+          model: "gemini-3.7-flash",
+        },
+      });
     }
 
     // Load selected STT provider
